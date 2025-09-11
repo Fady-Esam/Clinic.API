@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using Clinic.API.Domain.Identity;
 using System.Reflection.Emit;
+using Clinic.API.Domain.Entities;
 
 namespace Clinic.API.DL
 {
@@ -13,6 +14,7 @@ namespace Clinic.API.DL
         {
             base.OnModelCreating(modelBuilder);
         }
+        public DbSet<Patient> Patients { get; set; }
     }
 }
 

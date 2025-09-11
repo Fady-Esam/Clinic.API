@@ -23,7 +23,7 @@ namespace Clinic.API.BL.Services
     public class AuthService : IAuthService
     {
         
-        private readonly UserManager<ApplicationUser> _userManager;
+       private readonly UserManager<ApplicationUser> _userManager;
        private readonly JWT _jwt;
 
         public AuthService(UserManager<ApplicationUser> userManager, JWT jwt)
@@ -34,11 +34,12 @@ namespace Clinic.API.BL.Services
 
         public async Task<AuthResponseDto> RegisterAsync(RegisterDto dto, string? ipAddress)
         {
-            if (await _userManager.FindByEmailAsync(dto.Email) != null)
+            if (await _userManager.FindByEmailAsync(dto.Username) != null)
             {
+                
                 return new AuthResponseDto
                 {
-                    Errors = new() { "Email already exists" },
+                    Errors = new() { "UserName already exists" },
                     Message = "Registration failed",
                     StatusCode = StatusCodes.Status400BadRequest
                 };
@@ -47,7 +48,9 @@ namespace Clinic.API.BL.Services
             var user = new ApplicationUser
             {
                 Email = dto.Email,
-                UserName = dto.Username
+                UserName = dto.Username,
+                FullName = dto.Username,
+                PhoneNumber = dto.PhoneNumber
             };
 
             var result = await _userManager.CreateAsync(user, dto.Password);
@@ -62,7 +65,7 @@ namespace Clinic.API.BL.Services
                 };
             }
 
-            await _userManager.AddToRoleAsync(user, "User");
+            await _userManager.AddToRoleAsync(user, "Patient");
             var roles = (await _userManager.GetRolesAsync(user)).ToList();
             var accessToken = await GenerateJwtToken(user);
             var refreshToken = GenerateRefreshToken();

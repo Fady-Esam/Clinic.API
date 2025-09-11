@@ -2,6 +2,7 @@ using Clinic.API.BL.Interfaces;
 using Clinic.API.BL.Services;
 using Clinic.API.DL;
 using Clinic.API.DL.Models;
+using Clinic.API.DL.Repositories;
 using Clinic.API.Domain.Identity;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
@@ -67,6 +68,8 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>()
     .AddEntityFrameworkStores<ApplicationDBContext>()
     .AddDefaultTokenProviders();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IPatientRepository, PatientRepository>();
+builder.Services.AddScoped<IPatientService, PatientService>();
 builder.Services.AddAutoMapper(typeof(Program));
 
 
