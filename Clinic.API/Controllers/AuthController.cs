@@ -1,11 +1,14 @@
 ﻿using Azure;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using Clinic.API.BL.Dtos;
-using Clinic.API.BL.Interfaces;
+using Clinic.API.BL.Dtos.AuthDtos;
+using Clinic.API.BL.Interfaces.AuthInterfaces;
 using Clinic.API.DL.Models;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.VisualStudio.Web.CodeGenerators.Mvc.Templates.Blazor;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using static Google.Apis.Requests.BatchRequest;
 
 namespace Clinic.API.Controllers
 {
@@ -20,13 +23,13 @@ namespace Clinic.API.Controllers
             _authService = authService;
         }
 
+
         [HttpPost("register")]
         public async Task<IActionResult> Register(RegisterDto dto)
         {
             if (!ModelState.IsValid) 
             {
                 var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).ToList();
-
                 return BadRequest(new ApiResponse<AuthResponseDto>
                 {
                     Errors = errors,
@@ -36,22 +39,14 @@ namespace Clinic.API.Controllers
             }
 
 
-            var result = await _authService.RegisterAsync(dto, HttpContext.Connection.RemoteIpAddress?.ToString());
+            var response = await _authService.RegisterAsync(dto, HttpContext.Connection.RemoteIpAddress?.ToString());
 
-            if (result.StatusCode == StatusCodes.Status400BadRequest)
-                return BadRequest(result);
-            else
-            {
-                //Response.Cookies.Append("refreshToken", result.RefreshToken, new CookieOptions
-                //{
-                //    HttpOnly = true,
-                //    Secure = true,
-                //    SameSite = SameSiteMode.Strict,
-                //    Expires = DateTime.UtcNow.AddDays(7)
-                //});
+            return StatusCode(response.StatusCode, response);
 
-                return Ok(result);
-            } 
+            //if (result.StatusCode == StatusCodes.Status400BadRequest)
+            //    return BadRequest(result);
+            //return Ok(result);
+
         }
 
         [HttpPost("login")]
@@ -64,29 +59,23 @@ namespace Clinic.API.Controllers
                 return BadRequest(new ApiResponse<AuthResponseDto>
                 {
                     Errors = errors,
-                    Message = "Log in Failed",
+                    Message = "Login Failed",
                     StatusCode = StatusCodes.Status400BadRequest
                 });
 
             }
 
             var response = await _authService.LoginAsync(dto, HttpContext.Connection.RemoteIpAddress?.ToString());
-            if (response.StatusCode == StatusCodes.Status401Unauthorized)
-                return Unauthorized(response);
-            else
-            {
-                //Response.Cookies.Append("refreshToken", response.RefreshToken, new CookieOptions
-                //{
-                //    HttpOnly = true,
-                //    Secure = true,
-                //    SameSite = SameSiteMode.Strict,
-                //    Expires = DateTime.UtcNow.AddDays(7)
-                //});
-                return Ok(response);
-            }
+            return StatusCode(response.StatusCode, response);
+
+            //if (response.StatusCode == StatusCodes.Status401Unauthorized)
+            //    return Unauthorized(response);
+
+            //return Ok(response);
+
         }
 
-        [HttpPost("refresh")]
+        [HttpPost("refreshToken")]
         public async Task<IActionResult> Refresh([FromBody] RefreshTokenDto dto)
         {
 
@@ -97,28 +86,34 @@ namespace Clinic.API.Controllers
                 return BadRequest(new ApiResponse<AuthResponseDto>
                 {
                     Errors = errors,
-                    Message = "Refresh Failed",
+                    Message = "Getting new refresh tokeng failed",
                     StatusCode = StatusCodes.Status400BadRequest
                 });
             }
+            dto.CreatedByIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+            var response = await _authService.RefreshTokenAsync(dto);
+            return StatusCode(response.StatusCode, response);
 
-            var response = await _authService.RefreshTokenAsync(dto.UserId, dto.RefreshToken, HttpContext.Connection.RemoteIpAddress?.ToString());
-            if (response.StatusCode == StatusCodes.Status400BadRequest)
-                return BadRequest(response);
-            else if (response.StatusCode == StatusCodes.Status401Unauthorized)
-                return Unauthorized(response);
-            return Ok(response);
+            //if (response.StatusCode == StatusCodes.Status400BadRequest)
+            //    return BadRequest(response);
+            //if (response.StatusCode == StatusCodes.Status401Unauthorized)
+            //    return Unauthorized(response);
+            //if (response.StatusCode == StatusCodes.Status404NotFound)
+            //    return NotFound(response);
+            //return Ok(response);
         }
 
         [Authorize]
-        [HttpPost("revoke")]
+        [HttpPost("revokeToken")]
         public async Task<IActionResult> Revoke([FromBody] RevokeTokenDto dto)
         {
 
-            var success = await _authService.RevokeRefreshTokenAsync(dto.UserId);
-            if (!success) return BadRequest(new { errors = "Failed to revoke token" });
+            var response = await _authService.RevokeRefreshTokenAsync(dto);
+            return StatusCode(response.StatusCode, response);
 
-            return Ok(new { message = "Refresh token revoked successfully" });
+            //if (response.StatusCode == StatusCodes.Status404NotFound)
+            //    return NotFound(response);
+            //return Ok(response);
         }
     }
 }

@@ -1,11 +1,12 @@
 ﻿using System.ComponentModel.DataAnnotations;
 
-namespace Clinic.API.BL.Dtos
+namespace Clinic.API.BL.Dtos.AuthDtos
 {
     public class LoginDto
     {
 
         [Required(ErrorMessage = "Username is required")]
+        [MinLength(3, ErrorMessage = "Username must be at least 3 characters")]
         [MaxLength(30, ErrorMessage = "UserName must not exceed 30 charcters")]
         public string Username { get; set; }
 

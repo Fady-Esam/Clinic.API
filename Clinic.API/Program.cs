@@ -1,9 +1,12 @@
-using Clinic.API.BL.Interfaces;
+
+using Clinic.API.BL.Interfaces.AuthInterfaces;
+using Clinic.API.BL.Interfaces.DoctorInterfaces;
+using Clinic.API.BL.Interfaces.PatientInterfaces;
 using Clinic.API.BL.Services;
 using Clinic.API.DL;
 using Clinic.API.DL.Models;
 using Clinic.API.DL.Repositories;
-using Clinic.API.Domain.Identity;
+using Clinic.API.Domain.Entities;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -21,7 +24,7 @@ var jwtSettings = builder.Configuration.GetSection("JWT").Get<JWT>();
 // Register JWT as singleton for direct injection (optional)
 builder.Services.AddSingleton(resolver =>
     resolver.GetRequiredService<IOptions<JWT>>().Value);
-
+builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient();
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 // Add services to the container.
@@ -70,6 +73,8 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>()
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IPatientRepository, PatientRepository>();
 builder.Services.AddScoped<IPatientService, PatientService>();
+builder.Services.AddScoped<IDoctorRepository, DoctorRepository>();
+builder.Services.AddScoped<IDoctorService, DoctorService>();
 builder.Services.AddAutoMapper(typeof(Program));
 
 

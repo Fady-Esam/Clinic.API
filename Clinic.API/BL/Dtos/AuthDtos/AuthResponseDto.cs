@@ -1,5 +1,4 @@
-﻿
-namespace Clinic.API.BL.Dtos
+﻿namespace Clinic.API.BL.Dtos.AuthDtos
 {
     public class AuthResponseDto 
     {

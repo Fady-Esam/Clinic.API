@@ -1,34 +1,51 @@
-﻿using Clinic.API.BL.Interfaces;
+﻿using AutoMapper;
+using AutoMapper.QueryableExtensions;
+using Clinic.API.BL.Dtos;
+using Clinic.API.BL.Dtos.DoctorDtos;
+using Clinic.API.BL.Dtos.PatientDtos;
+using Clinic.API.BL.Interfaces;
+using Clinic.API.BL.Interfaces.PatientInterfaces;
 using Clinic.API.Domain.Entities;
 using Google;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Internal;
-
+using Microsoft.Identity.Client.Extensions.Msal;
+using System.Linq;
 namespace Clinic.API.DL.Repositories
 {
     public class PatientRepository : IPatientRepository
     {
         private readonly ApplicationDBContext _context;
+        private readonly IMapper _mapper;
 
-        public PatientRepository(ApplicationDBContext context)
+        public PatientRepository(ApplicationDBContext context, IMapper mapper)
         {
             _context = context;
+            _mapper = mapper;
         }
-
+        
         public async Task<Patient> AddAsync(Patient patient)
         {
             await _context.Patients.AddAsync(patient);
             await _context.SaveChangesAsync();
             return patient;
         }
-
-        public async Task<IReadOnlyList<Patient>> GetAllAsync()
+        public async Task<Patient> UpdateAsync(Patient patient)
         {
-            return await _context.Patients
-                .AsNoTracking()
-                .Include(p => p.ApplicationUser)
-                .Where(p => !p.IsDeleted)
-                .ToListAsync();
+            _context.Patients.Update(patient);
+            await _context.SaveChangesAsync();
+            return patient;
+        }
+        public async Task<bool> SoftDeleteAsync(Guid id)
+        {
+            var patient = await _context.Patients.FirstOrDefaultAsync(p => p.Id == id && !p.IsDeleted);
+            if (patient == null) return false;
+
+            patient.IsDeleted = true;
+            _context.Patients.Update(patient);
+            await _context.SaveChangesAsync();
+            return true;
         }
 
         public async Task<Patient?> GetByIdAsync(Guid id)
@@ -39,22 +56,38 @@ namespace Clinic.API.DL.Repositories
                 .FirstOrDefaultAsync(p => p.Id == id && !p.IsDeleted);
         }
 
-        public async Task<Patient> UpdateAsync(Patient patient)
+        public async Task<IReadOnlyList<Patient>> GetAllAsync()
         {
-            _context.Patients.Update(patient);
-            await _context.SaveChangesAsync();
-            return patient;
+            return await _context.Patients
+                .AsNoTracking()
+                .Include(p => p.ApplicationUser)
+                .Where(p => !p.IsDeleted)
+                .ToListAsync();
         }
-
-        public async Task<bool> SoftDeleteAsync(Guid id)
+        public async Task<(List<Patient> Items, int Total)> GetPagedAsync(PagingDto dto)
         {
-            var patient = await _context.Patients.FirstOrDefaultAsync(p => p.Id == id && !p.IsDeleted);
-            if (patient == null) return false;
+            var query = _context.Patients
+                .AsNoTracking()
+                .Include(p => p.ApplicationUser) // load navigation property
+                .Where(p => !p.IsDeleted)
+                .AsQueryable();
 
-            patient.IsDeleted = true;
-            _context.Patients.Update(patient);
-            await _context.SaveChangesAsync();
-            return true;
+            if (!string.IsNullOrWhiteSpace(dto.Search))
+            {
+                query = query.Where(p => p.ApplicationUser != null &&
+                                         p.ApplicationUser.UserName != null &&
+                                         p.ApplicationUser.UserName.Contains(dto.Search));
+            }
+
+            var total = await query.CountAsync();
+
+            var items = await query
+                .OrderBy(p => p.ApplicationUser.UserName ?? "") 
+                .Skip((dto.Page - 1) * dto.PageSize)
+                .Take(dto.PageSize)
+                .ToListAsync();
+
+            return (items, total);
         }
     }
 }

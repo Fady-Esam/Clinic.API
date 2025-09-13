@@ -25,7 +25,6 @@ namespace Clinic.API.Middlewares
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Unhandled exception occurred");
-
                 await HandleExceptionAsync(context, ex);
             }
         }
@@ -33,12 +32,31 @@ namespace Clinic.API.Middlewares
         private static Task HandleExceptionAsync(HttpContext context, Exception ex)
         {
             context.Response.ContentType = "application/json";
-            context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
 
-            var response = new ApiResponse<string>{
-                Errors =  new () { ex.Message },
-                Message = "An unexpected error occurred",
-                StatusCode = context.Response.StatusCode
+            int statusCode;
+            List<string> errors = new();
+            string message = ex.Message;
+
+            if (ex is ApiException apiEx)
+            {
+                statusCode = apiEx.StatusCode;
+                errors = apiEx.Errors;
+                if (!string.IsNullOrEmpty(apiEx.ExtraInfo))
+                    message += $" | Context: {apiEx.ExtraInfo}";
+            }
+            else
+            {
+                statusCode = StatusCodes.Status500InternalServerError;
+                errors.Add(ex.Message);
+            }
+
+            context.Response.StatusCode = statusCode;
+
+            var response = new ApiResponse<string>
+            {
+                Message = message,
+                Errors = errors,
+                StatusCode = statusCode
             };
 
             var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };

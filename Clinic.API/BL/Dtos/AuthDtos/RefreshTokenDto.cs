@@ -1,8 +1,8 @@
-﻿using Clinic.API.Domain.Identity;
+﻿
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 
-namespace Clinic.API.BL.Dtos
+namespace Clinic.API.BL.Dtos.AuthDtos
 {
     public class RefreshTokenDto
     {
