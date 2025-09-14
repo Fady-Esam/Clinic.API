@@ -87,6 +87,46 @@ namespace Clinic.API.Migrations
                     b.ToTable("AspNetUsers", (string)null);
                 });
 
+            modelBuilder.Entity("Clinic.API.Domain.Entities.Appointment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("AppointmentDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("DoctorId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<Guid>("PatientId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DoctorId");
+
+                    b.HasIndex("PatientId");
+
+                    b.ToTable("Appointments");
+                });
+
             modelBuilder.Entity("Clinic.API.Domain.Entities.Doctor", b =>
                 {
                     b.Property<Guid>("Id")
@@ -104,7 +144,7 @@ namespace Clinic.API.Migrations
                     b.Property<DateTime?>("DateOfBirth")
                         .HasColumnType("datetime2");
 
-                    b.Property<DateTime?>("DateOfRegisteration")
+                    b.Property<DateTime>("DateOfRegisteration")
                         .HasColumnType("datetime2");
 
                     b.Property<string>("Gender")
@@ -146,7 +186,7 @@ namespace Clinic.API.Migrations
                     b.Property<DateTime?>("DateOfBirth")
                         .HasColumnType("datetime2");
 
-                    b.Property<DateTime?>("DateOfRegisteration")
+                    b.Property<DateTime>("DateOfRegisteration")
                         .HasColumnType("datetime2");
 
                     b.Property<string>("Gender")
@@ -297,12 +337,31 @@ namespace Clinic.API.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("Clinic.API.Domain.Entities.Appointment", b =>
+                {
+                    b.HasOne("Clinic.API.Domain.Entities.Doctor", "Doctor")
+                        .WithMany("Appointments")
+                        .HasForeignKey("DoctorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Clinic.API.Domain.Entities.Patient", "Patient")
+                        .WithMany("Appointments")
+                        .HasForeignKey("PatientId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Doctor");
+
+                    b.Navigation("Patient");
+                });
+
             modelBuilder.Entity("Clinic.API.Domain.Entities.Doctor", b =>
                 {
                     b.HasOne("Clinic.API.Domain.Entities.ApplicationUser", "ApplicationUser")
                         .WithOne("Doctor")
                         .HasForeignKey("Clinic.API.Domain.Entities.Doctor", "ApplicationUserId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("ApplicationUser");
@@ -313,7 +372,7 @@ namespace Clinic.API.Migrations
                     b.HasOne("Clinic.API.Domain.Entities.ApplicationUser", "ApplicationUser")
                         .WithOne("Patient")
                         .HasForeignKey("Clinic.API.Domain.Entities.Patient", "ApplicationUserId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("ApplicationUser");
@@ -375,6 +434,16 @@ namespace Clinic.API.Migrations
                     b.Navigation("Doctor");
 
                     b.Navigation("Patient");
+                });
+
+            modelBuilder.Entity("Clinic.API.Domain.Entities.Doctor", b =>
+                {
+                    b.Navigation("Appointments");
+                });
+
+            modelBuilder.Entity("Clinic.API.Domain.Entities.Patient", b =>
+                {
+                    b.Navigation("Appointments");
                 });
 #pragma warning restore 612, 618
         }

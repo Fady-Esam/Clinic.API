@@ -6,19 +6,10 @@ namespace Clinic.API.BL.Dtos.AuthDtos
 {
     public class RefreshTokenDto
     {
-        [Required(ErrorMessage = "RefreshToken is required")]
-        public string RefreshToken { get; set; }
-        [Required(ErrorMessage = "UserId is required")]
-        public string UserId { get; set; }
-        [JsonIgnore]
-        public DateTime? Expires { get; set; }
-        [JsonIgnore]
-        public DateTime? Created { get; set; }
-        [JsonIgnore]
+        public string RefreshToken { get; set; } = string.Empty;
+        public string UserId { get; set; } = string.Empty;
+        public DateTime Created { get; set; } = DateTime.UtcNow;
+        public DateTime Expires { get; set; } = DateTime.UtcNow.AddDays(7);
         public string? CreatedByIp { get; set; }
-
-        [JsonIgnore]
-        public bool IsExpired => DateTime.UtcNow >= Expires;
     }
-
 }

@@ -14,5 +14,7 @@ namespace Clinic.API.BL.Interfaces.DoctorInterfaces
         Task<bool> SoftDeleteAsync(Guid id);
         Task<(List<Doctor> Items, int Total)> GetPagedAsync(PagingDto dto);
 
+        Task<ICollection<Appointment>> GetDoctorAppointmentsAsync(Guid doctorId);
+
     }
 }

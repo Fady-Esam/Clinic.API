@@ -13,18 +13,22 @@ namespace Clinic.API.DL.Repositories
     public class DoctorRepository : IDoctorRepository
     {
         private readonly ApplicationDBContext _context;
-        private readonly IMapper _mapper;
 
-        public DoctorRepository(ApplicationDBContext context, IMapper mapper)
+        public DoctorRepository(ApplicationDBContext context)
         {
             _context = context;
-            _mapper = mapper;
 
         }
 
         public async Task<Doctor> AddAsync(Doctor doctor)
         {
             await _context.Doctors.AddAsync(doctor);
+            await _context.SaveChangesAsync();
+            return doctor;
+        }
+        public async Task<Doctor> UpdateAsync(Doctor doctor)
+        {
+            _context.Doctors.Update(doctor);
             await _context.SaveChangesAsync();
             return doctor;
         }
@@ -61,12 +65,6 @@ namespace Clinic.API.DL.Repositories
         }
 
       
-        public async Task<Doctor> UpdateAsync(Doctor doctor)
-        {
-            _context.Doctors.Update(doctor);
-            await _context.SaveChangesAsync();
-            return doctor;
-        }
         public async Task<(List<Doctor> Items, int Total)> GetPagedAsync(PagingDto dto)
         {
             var query = _context.Doctors
@@ -78,8 +76,7 @@ namespace Clinic.API.DL.Repositories
             // 🔍 Apply search safely
             if (!string.IsNullOrWhiteSpace(dto.Search))
             {
-                query = query.Where(p => p.ApplicationUser != null &&
-                                         p.ApplicationUser.UserName != null &&
+                query = query.Where(p => p.ApplicationUser.UserName != null &&
                                          p.ApplicationUser.UserName.Contains(dto.Search));
             }
 
@@ -92,6 +89,16 @@ namespace Clinic.API.DL.Repositories
                 .ToListAsync();
 
             return (items, total);
+        }
+
+        public async Task<ICollection<Appointment>> GetDoctorAppointmentsAsync(Guid doctorId)
+        {
+            var doctor = await _context.Doctors
+                .AsNoTracking()
+                .Include(p => p.Appointments) // eager load appointments
+                .FirstOrDefaultAsync(p => p.Id == doctorId && !p.IsDeleted);
+
+            return doctor?.Appointments ?? new List<Appointment>();
         }
 
     }

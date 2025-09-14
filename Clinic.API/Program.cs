@@ -1,4 +1,5 @@
 
+using Clinic.API.BL.Interfaces.AppointmentInterfaces;
 using Clinic.API.BL.Interfaces.AuthInterfaces;
 using Clinic.API.BL.Interfaces.DoctorInterfaces;
 using Clinic.API.BL.Interfaces.PatientInterfaces;
@@ -7,6 +8,7 @@ using Clinic.API.DL;
 using Clinic.API.DL.Models;
 using Clinic.API.DL.Repositories;
 using Clinic.API.Domain.Entities;
+using Clinic.API.Domain.Enums;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -15,6 +17,7 @@ using Microsoft.Extensions.Options;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using System.Text.Json.Serialization;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -33,7 +36,14 @@ builder.Services.AddDbContext<ApplicationDBContext>(options =>
 builder.Services.AddControllers().ConfigureApiBehaviorOptions(options =>
 {
     options.SuppressModelStateInvalidFilter = true; // ?? disables auto-400
+}).AddJsonOptions(options =>
+{
+    options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
 });
+ //.AddJsonOptions(opts =>
+ // {
+ //     opts.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
+ // });
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
@@ -75,6 +85,8 @@ builder.Services.AddScoped<IPatientRepository, PatientRepository>();
 builder.Services.AddScoped<IPatientService, PatientService>();
 builder.Services.AddScoped<IDoctorRepository, DoctorRepository>();
 builder.Services.AddScoped<IDoctorService, DoctorService>();
+builder.Services.AddScoped<IAppointmentRepository, AppointmentRepository>();
+builder.Services.AddScoped<IAppointmentService, AppointmentService>();
 builder.Services.AddAutoMapper(typeof(Program));
 
 
@@ -117,5 +129,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
 
 app.Run();

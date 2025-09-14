@@ -52,12 +52,7 @@ namespace Clinic.API.Middlewares
 
             context.Response.StatusCode = statusCode;
 
-            var response = new ApiResponse<string>
-            {
-                Message = message,
-                Errors = errors,
-                StatusCode = statusCode
-            };
+            var response = ApiResponse<string>.Failure(message, errors, statusCode);
 
             var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
             var json = JsonSerializer.Serialize(response, options);

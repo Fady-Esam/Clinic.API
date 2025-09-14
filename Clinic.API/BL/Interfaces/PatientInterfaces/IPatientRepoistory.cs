@@ -12,5 +12,6 @@ namespace Clinic.API.BL.Interfaces.PatientInterfaces
         Task<Patient?> GetByIdAsync(Guid id);
         Task<IReadOnlyList<Patient>> GetAllAsync();
         Task<(List<Patient> Items, int Total)> GetPagedAsync(PagingDto dto);
+        Task<ICollection<Appointment>> GetPatientAppointmentsAsync(Guid patientId);
     }
 }

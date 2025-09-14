@@ -12,7 +12,6 @@ namespace Clinic.API.Controllers
     [ApiController]
     [Route("api/[controller]")]
     //[Authorize]
-
     public class PatientsController : Controller
     {
         private readonly IPatientService _service;
@@ -24,48 +23,26 @@ namespace Clinic.API.Controllers
             _cache = cache;
         }
 
-        private List<string> GetModelErrors()
-        {
-            return ModelState.Values.SelectMany(v => v.Errors)
-                                    .Select(e => e.ErrorMessage)
-                                    .ToList();
-        }
+        private List<string> GetModelErrors() => ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).ToList();
 
         [HttpPost]
-        public async Task<IActionResult> Create([FromBody] CreateOrUpdatePatientDto dto)
+        public async Task<IActionResult> Create([FromBody] CreatePatientDto dto)
         {
             if (!ModelState.IsValid)
-            {
-                return BadRequest(new ApiResponse<CreateOrUpdatePatientDto>
-                {
-                    Message = "Failed to create patient",
-                    Errors = GetModelErrors(),
-                    StatusCode = StatusCodes.Status400BadRequest
-                });
-            }
+                return BadRequest(ApiResponse<CreatePatientDto>.Failure("Failed to create patient", GetModelErrors()));
 
             var response = await _service.CreateAsync(dto);
             _cache.Remove("all_patients");
             return StatusCode(response.StatusCode, response);
-
         }
 
         [HttpPut("{id:guid}")]
-        public async Task<IActionResult> Update(Guid id, [FromBody] CreateOrUpdatePatientDto dto)
+        public async Task<IActionResult> Update(Guid id, [FromBody] UpdatePatientDto dto)
         {
             if (!ModelState.IsValid)
-            {
-                return BadRequest(new ApiResponse<CreateOrUpdatePatientDto>
-                {
-                    Message = "Failed to update patient",
-                    Errors = GetModelErrors(),
-                    StatusCode = StatusCodes.Status400BadRequest
-                });
-            }
+                return BadRequest(ApiResponse<UpdatePatientDto>.Failure("Failed to update patient", GetModelErrors()));
 
-            dto.Id = id;
-            var response = await _service.UpdateAsync(dto);
-
+            var response = await _service.UpdateAsync(id, dto);
             _cache.Remove("all_patients");
             return StatusCode(response.StatusCode, response);
         }
@@ -76,7 +53,6 @@ namespace Clinic.API.Controllers
             var response = await _service.DeleteAsync(id);
             _cache.Remove("all_patients");
             return StatusCode(response.StatusCode, response);
-            
         }
 
         [HttpGet("{id:guid}")]
@@ -84,7 +60,6 @@ namespace Clinic.API.Controllers
         {
             var response = await _service.GetByIdAsync(id);
             return StatusCode(response.StatusCode, response);
-           
         }
 
         [HttpGet]
@@ -93,14 +68,7 @@ namespace Clinic.API.Controllers
             const string cacheKey = "all_patients";
 
             if (_cache.TryGetValue<IReadOnlyList<PatientDto>>(cacheKey, out var cachedPatients) && cachedPatients != null)
-            {
-                return Ok(new ApiResponse<IReadOnlyList<PatientDto>>
-                {
-                    Data = cachedPatients,
-                    Message = "Patients retrieved successfully (from cache)",
-                    StatusCode = StatusCodes.Status200OK
-                });
-            }
+                return Ok(ApiResponse<IReadOnlyList<PatientDto>>.Success(cachedPatients, "Patients retrieved successfully (from cache)"));
 
             var response = await _service.GetAllAsync();
 
@@ -115,6 +83,7 @@ namespace Clinic.API.Controllers
 
             return StatusCode(response.StatusCode, response);
         }
+
         [HttpGet("paged")]
         public async Task<IActionResult> GetPaged([FromQuery] PagingDto dto)
         {
@@ -122,6 +91,7 @@ namespace Clinic.API.Controllers
             return StatusCode(response.StatusCode, response);
         }
     }
+
 }
 
 

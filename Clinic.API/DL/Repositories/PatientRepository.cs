@@ -17,12 +17,10 @@ namespace Clinic.API.DL.Repositories
     public class PatientRepository : IPatientRepository
     {
         private readonly ApplicationDBContext _context;
-        private readonly IMapper _mapper;
 
-        public PatientRepository(ApplicationDBContext context, IMapper mapper)
+        public PatientRepository(ApplicationDBContext context)
         {
             _context = context;
-            _mapper = mapper;
         }
         
         public async Task<Patient> AddAsync(Patient patient)
@@ -56,6 +54,7 @@ namespace Clinic.API.DL.Repositories
                 .FirstOrDefaultAsync(p => p.Id == id && !p.IsDeleted);
         }
 
+
         public async Task<IReadOnlyList<Patient>> GetAllAsync()
         {
             return await _context.Patients
@@ -74,8 +73,7 @@ namespace Clinic.API.DL.Repositories
 
             if (!string.IsNullOrWhiteSpace(dto.Search))
             {
-                query = query.Where(p => p.ApplicationUser != null &&
-                                         p.ApplicationUser.UserName != null &&
+                query = query.Where(p => p.ApplicationUser.UserName != null &&
                                          p.ApplicationUser.UserName.Contains(dto.Search));
             }
 
@@ -89,5 +87,16 @@ namespace Clinic.API.DL.Repositories
 
             return (items, total);
         }
+
+        public async Task<ICollection<Appointment>> GetPatientAppointmentsAsync(Guid patientId)
+        {
+            var patient = await _context.Patients
+                .AsNoTracking()
+                .Include(p => p.Appointments) // eager load appointments
+                .FirstOrDefaultAsync(p => p.Id == patientId && !p.IsDeleted);
+
+            return patient?.Appointments ?? new List<Appointment>();
+        }
     }
+
 }

@@ -1,12 +1,7 @@
-﻿
-using Clinic.API.BL.Dtos;
-using Clinic.API.BL.Dtos.DoctorDtos;
-using Clinic.API.BL.Dtos.PatientDtos;
-using Clinic.API.BL.Interfaces.DoctorInterfaces;
-using Clinic.API.BL.Interfaces.PatientInterfaces;
-using Clinic.API.BL.Services;
+﻿using Clinic.API.BL.Dtos;
+using Clinic.API.BL.Dtos.AppointmentDtos;
+using Clinic.API.BL.Interfaces.AppointmentInterfaces;
 using Clinic.API.DL.Models;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
 
@@ -15,12 +10,12 @@ namespace Clinic.API.Controllers
     [ApiController]
     [Route("api/[controller]")]
     //[Authorize]
-    public class DoctorsController : Controller
+    public class AppointmentsController : Controller
     {
-        private readonly IDoctorService _service;
+        private readonly IAppointmentService _service;
         private readonly IMemoryCache _cache;
 
-        public DoctorsController(IDoctorService service, IMemoryCache cache)
+        public AppointmentsController(IAppointmentService service, IMemoryCache cache)
         {
             _service = service;
             _cache = cache;
@@ -29,36 +24,38 @@ namespace Clinic.API.Controllers
         private List<string> GetModelErrors() => ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).ToList();
 
         [HttpPost]
-        public async Task<IActionResult> Create([FromBody] CreateDoctorDto dto)
+        public async Task<IActionResult> Create([FromBody] CreateAppointmentDto dto)
         {
             if (!ModelState.IsValid)
-                return BadRequest(ApiResponse<CreateDoctorDto>.Failure("Failed to create doctor", GetModelErrors()));
+                return BadRequest(ApiResponse<CreateAppointmentDto>.Failure("Failed to create appointment", GetModelErrors()));
 
             var response = await _service.CreateAsync(dto);
-            _cache.Remove("all_doctors");
+            _cache.Remove("all_appointments");
 
             return StatusCode(response.StatusCode, response);
         }
 
         [HttpPut("{id:guid}")]
-        public async Task<IActionResult> Update(Guid id, [FromBody] UpdateDoctorDto dto)
+        public async Task<IActionResult> Update(Guid id, [FromBody] UpdateAppointmentDto dto)
         {
             if (!ModelState.IsValid)
-                return BadRequest(ApiResponse<UpdateDoctorDto>.Failure("Failed to update doctor", GetModelErrors()));
+                return BadRequest(ApiResponse<UpdateAppointmentDto>.Failure("Failed to update appointment", GetModelErrors()));
 
             var response = await _service.UpdateAsync(id, dto);
-            _cache.Remove("all_doctors");
+            _cache.Remove("all_appointments");
 
             return StatusCode(response.StatusCode, response);
+
         }
 
         [HttpDelete("{id:guid}")]
         public async Task<IActionResult> Delete(Guid id)
         {
             var response = await _service.DeleteAsync(id);
-            _cache.Remove("all_doctors");
+            _cache.Remove("all_appointments");
 
             return StatusCode(response.StatusCode, response);
+
         }
 
         [HttpGet("{id:guid}")]
@@ -66,15 +63,16 @@ namespace Clinic.API.Controllers
         {
             var response = await _service.GetByIdAsync(id);
             return StatusCode(response.StatusCode, response);
+
         }
 
         [HttpGet]
         public async Task<IActionResult> GetAll()
         {
-            const string cacheKey = "all_doctors";
+            const string cacheKey = "all_appointments";
 
-            if (_cache.TryGetValue<IReadOnlyList<DoctorDto>>(cacheKey, out var cachedDoctors) && cachedDoctors != null)
-                return Ok(ApiResponse<IReadOnlyList<DoctorDto>>.Success(cachedDoctors, "Doctors retrieved successfully (from cache)"));
+            if (_cache.TryGetValue<IReadOnlyList<AppointmentDto>>(cacheKey, out var cachedAppointments) && cachedAppointments != null)
+                return Ok(ApiResponse<IReadOnlyList<AppointmentDto>>.Success(cachedAppointments, "Appointments retrieved successfully (from cache)"));
 
             var response = await _service.GetAllAsync();
 
@@ -86,6 +84,7 @@ namespace Clinic.API.Controllers
             });
 
             return StatusCode(response.StatusCode, response);
+
         }
 
         [HttpGet("paged")]
@@ -95,5 +94,6 @@ namespace Clinic.API.Controllers
             return StatusCode(response.StatusCode, response);
         }
     }
+
 
 }

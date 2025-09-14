@@ -23,98 +23,55 @@ namespace Clinic.API.Controllers
             _authService = authService;
         }
 
+        private List<string> GetModelErrors() => ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).ToList();
 
         [HttpPost("register")]
         public async Task<IActionResult> Register(RegisterDto dto)
         {
-            if (!ModelState.IsValid) 
-            {
-                var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).ToList();
-                return BadRequest(new ApiResponse<AuthResponseDto>
-                {
-                    Errors = errors,
-                    Message = "Registeration Failed",
-                    StatusCode = StatusCodes.Status400BadRequest
-                });
-            }
-
+            if (!ModelState.IsValid)
+                return BadRequest(ApiResponse<AuthResponseDto>.Failure(
+                    "Registration Failed",
+                    GetModelErrors()
+                ));
 
             var response = await _authService.RegisterAsync(dto, HttpContext.Connection.RemoteIpAddress?.ToString());
-
             return StatusCode(response.StatusCode, response);
-
-            //if (result.StatusCode == StatusCodes.Status400BadRequest)
-            //    return BadRequest(result);
-            //return Ok(result);
-
         }
 
         [HttpPost("login")]
         public async Task<IActionResult> Login(LoginDto dto)
         {
             if (!ModelState.IsValid)
-            {
-                var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).ToList();
-
-                return BadRequest(new ApiResponse<AuthResponseDto>
-                {
-                    Errors = errors,
-                    Message = "Login Failed",
-                    StatusCode = StatusCodes.Status400BadRequest
-                });
-
-            }
+                return BadRequest(ApiResponse<AuthResponseDto>.Failure(
+                    "Login Failed",
+                    GetModelErrors()
+                ));
 
             var response = await _authService.LoginAsync(dto, HttpContext.Connection.RemoteIpAddress?.ToString());
             return StatusCode(response.StatusCode, response);
-
-            //if (response.StatusCode == StatusCodes.Status401Unauthorized)
-            //    return Unauthorized(response);
-
-            //return Ok(response);
-
         }
 
         [HttpPost("refreshToken")]
-        public async Task<IActionResult> Refresh([FromBody] RefreshTokenDto dto)
+        public async Task<IActionResult> Refresh([FromBody] CreateRefreshTokenDto dto)
         {
-
             if (!ModelState.IsValid)
-            {
-                var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).ToList();
+                return BadRequest(ApiResponse<AuthResponseDto>.Failure(
+                    "Getting new refresh token failed",
+                    GetModelErrors()
+                ));
 
-                return BadRequest(new ApiResponse<AuthResponseDto>
-                {
-                    Errors = errors,
-                    Message = "Getting new refresh tokeng failed",
-                    StatusCode = StatusCodes.Status400BadRequest
-                });
-            }
-            dto.CreatedByIp = HttpContext.Connection.RemoteIpAddress?.ToString();
-            var response = await _authService.RefreshTokenAsync(dto);
+            var response = await _authService.RefreshTokenAsync(dto, HttpContext.Connection.RemoteIpAddress?.ToString());
             return StatusCode(response.StatusCode, response);
-
-            //if (response.StatusCode == StatusCodes.Status400BadRequest)
-            //    return BadRequest(response);
-            //if (response.StatusCode == StatusCodes.Status401Unauthorized)
-            //    return Unauthorized(response);
-            //if (response.StatusCode == StatusCodes.Status404NotFound)
-            //    return NotFound(response);
-            //return Ok(response);
         }
 
         [Authorize]
         [HttpPost("revokeToken")]
         public async Task<IActionResult> Revoke([FromBody] RevokeTokenDto dto)
         {
-
             var response = await _authService.RevokeRefreshTokenAsync(dto);
             return StatusCode(response.StatusCode, response);
-
-            //if (response.StatusCode == StatusCodes.Status404NotFound)
-            //    return NotFound(response);
-            //return Ok(response);
         }
     }
+
 }
 

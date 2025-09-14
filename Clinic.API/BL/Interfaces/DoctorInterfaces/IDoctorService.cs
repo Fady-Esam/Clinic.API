@@ -7,8 +7,8 @@ namespace Clinic.API.BL.Interfaces.DoctorInterfaces
 {
     public interface IDoctorService
     {
-        Task<ApiResponse<DoctorDto>> CreateAsync(CreateOrUpdateDoctorDto dto);
-        Task<ApiResponse<DoctorDto>> UpdateAsync(CreateOrUpdateDoctorDto dto);
+        Task<ApiResponse<DoctorDto>> CreateAsync(CreateDoctorDto dto);
+        Task<ApiResponse<DoctorDto>> UpdateAsync(Guid id, UpdateDoctorDto dto);
         Task<ApiResponse<bool>> DeleteAsync(Guid id);
         Task<ApiResponse<DoctorDto>> GetByIdAsync(Guid id);
         Task<ApiResponse<IReadOnlyList<DoctorDto>>> GetAllAsync();

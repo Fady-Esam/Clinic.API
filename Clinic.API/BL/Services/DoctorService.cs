@@ -5,8 +5,10 @@ using Clinic.API.BL.Dtos.PatientDtos;
 using Clinic.API.BL.Interfaces.DoctorInterfaces;
 using Clinic.API.DL.Models;
 using Clinic.API.Domain.Entities;
+using Clinic.API.Domain.Enums;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using System.Numerics;
 
 namespace Clinic.API.BL.Services
 {
@@ -22,140 +24,104 @@ namespace Clinic.API.BL.Services
             _mapper = mapper;
             _userManager = userManager;
         }
-        public async Task<ApiResponse<DoctorDto>> CreateAsync(CreateOrUpdateDoctorDto dto)
+
+        public async Task<ApiResponse<DoctorDto>> CreateAsync(CreateDoctorDto dto)
         {
             const string errMessage = "Failed to create doctor";
 
             var user = await _userManager.Users
+                                         .AsNoTracking()
                                          .Include(u => u.Doctor)
-                                         .Include(p => p.Patient)
+                                         .Include(u => u.Patient)
                                          .FirstOrDefaultAsync(u => u.Id == dto.ApplicationUserId);
 
-            if (user == null)
-                return new ApiResponse<DoctorDto>
-                {
-                    Message = errMessage,
-                    Errors = { $"User not found with Id {dto.ApplicationUserId}" },
-                    StatusCode = StatusCodes.Status404NotFound
-                };
+            if (user == null) return ApiResponse<DoctorDto>.Failure(errMessage, new() { $"User not found with Id {dto.ApplicationUserId}" }, StatusCodes.Status404NotFound);
 
-            if (user.Doctor != null)
-                return new ApiResponse<DoctorDto>
-                {
-                    Message = errMessage,
-                    Errors = { $"Doctor already exists for user Id {dto.ApplicationUserId}" },
-                    StatusCode = StatusCodes.Status400BadRequest
-                };
+            var userRoles = await _userManager.GetRolesAsync(user);
+            if (!userRoles.Any(r => string.Equals(r, UserRole.Doctor.ToString(), StringComparison.OrdinalIgnoreCase)))
+                return ApiResponse<DoctorDto>.Failure(errMessage, new() { $"Roles for user Id {dto.ApplicationUserId} do not contain Doctor" });
 
-            if (user.Patient != null)
-                return new ApiResponse<DoctorDto>
-                {
-                    Message = errMessage,
-                    Errors = { $"This Id {dto.ApplicationUserId} is already registered as Patient" },
-                    StatusCode = StatusCodes.Status400BadRequest
-                };
+            if (user.Doctor != null) return ApiResponse<DoctorDto>.Failure(errMessage, new() { $"Doctor already exists for user Id {dto.ApplicationUserId}" });
+
+            if (user.Patient != null) return ApiResponse<DoctorDto>.Failure(errMessage, new() { $"This Id {dto.ApplicationUserId} is already registered as Patient" });
 
             var doctor = _mapper.Map<Doctor>(dto);
-            // doctor.ApplicationUserId = dto.ApplicationUserId;
+            var createdDoctor = await _repo.AddAsync(doctor);
+            createdDoctor.ApplicationUser = user;
 
-            var created = await _repo.AddAsync(doctor);
-
-            return new ApiResponse<DoctorDto>
-            {
-                Data = _mapper.Map<DoctorDto>(created),
-                Message = "Doctor created successfully",
-                StatusCode = StatusCodes.Status201Created
-            };
+            return ApiResponse<DoctorDto>.Success(_mapper.Map<DoctorDto>(createdDoctor), "Doctor created successfully", StatusCodes.Status201Created);
         }
 
-        public async Task<ApiResponse<DoctorDto>> UpdateAsync(CreateOrUpdateDoctorDto dto)
+        public async Task<ApiResponse<DoctorDto>> UpdateAsync(Guid id, UpdateDoctorDto dto)
         {
             const string errMessage = "Failed to update doctor";
 
-            if (dto.Id == Guid.Empty)
-                return new ApiResponse<DoctorDto>
-                {
-                    Message = errMessage,
-                    Errors = { "Doctor Id must not be empty" },
-                    StatusCode = StatusCodes.Status400BadRequest
-                };
+            if (id == Guid.Empty) return ApiResponse<DoctorDto>.Failure(errMessage, new() { "Doctor Id must not be empty" });
 
-            var doctor = await _repo.GetByIdAsync(dto.Id);
-            if (doctor == null)
-                return new ApiResponse<DoctorDto>
-                {
-                    Message = errMessage,
-                    Errors = { $"Doctor not found with Id {dto.Id}" },
-                    StatusCode = StatusCodes.Status404NotFound
-                };
+            var doctor = await _repo.GetByIdAsync(id);
+            if (doctor == null) return ApiResponse<DoctorDto>.Failure(errMessage, new() { $"Doctor not found with Id {id}" }, StatusCodes.Status404NotFound);
 
             _mapper.Map(dto, doctor);
             var updated = await _repo.UpdateAsync(doctor);
 
-            return new ApiResponse<DoctorDto>
+            if (dto.UpdateApplicationUserDto != null)
             {
-                Data = _mapper.Map<DoctorDto>(updated),
-                Message = "Doctor updated successfully",
-                StatusCode = StatusCodes.Status200OK
-            };
+                var user = doctor.ApplicationUser;
+
+                if (!string.IsNullOrEmpty(dto.UpdateApplicationUserDto.UserName))
+                {
+                    var usernameExists = await _userManager.Users
+                        .AsNoTracking()
+                        .AnyAsync(u => u.NormalizedUserName == dto.UpdateApplicationUserDto.UserName.ToUpper() && u.Id != user.Id);
+                    if (usernameExists) return ApiResponse<DoctorDto>.Failure(errMessage, new() { "Username is already taken." });
+                }
+
+                if (!string.IsNullOrEmpty(dto.UpdateApplicationUserDto.Email))
+                {
+                    var emailExists = await _userManager.Users
+                        .AsNoTracking()
+                        .AnyAsync(u => u.NormalizedEmail == dto.UpdateApplicationUserDto.Email.ToUpper() && u.Id != user.Id);
+                    if (emailExists) return ApiResponse<DoctorDto>.Failure(errMessage, new() { "Email is already taken." });
+                }
+
+                if (!string.IsNullOrEmpty(dto.UpdateApplicationUserDto.PhoneNumber))
+                {
+                    var phoneNumberExists = await _userManager.Users
+                        .AsNoTracking()
+                        .AnyAsync(u => u.PhoneNumber == dto.UpdateApplicationUserDto.PhoneNumber && u.Id != user.Id);
+                    if (phoneNumberExists) return ApiResponse<DoctorDto>.Failure(errMessage, new() { "Phone Number is already taken." });
+                }
+
+                _mapper.Map(dto.UpdateApplicationUserDto, user);
+                var result = await _userManager.UpdateAsync(user);
+                if (!result.Succeeded) return ApiResponse<DoctorDto>.Failure(errMessage, result.Errors.Select(e => e.Description).ToList());
+            }
+
+            return ApiResponse<DoctorDto>.Success(_mapper.Map<DoctorDto>(updated), "Doctor updated successfully");
         }
 
         public async Task<ApiResponse<bool>> DeleteAsync(Guid id)
         {
             const string errMessage = "Failed to delete doctor";
 
-            if (id == Guid.Empty)
-                return new ApiResponse<bool>
-                {
-                    Message = errMessage,
-                    Errors = { "Doctor Id must not be empty" },
-                    StatusCode = StatusCodes.Status400BadRequest
-                };
+            if (id == Guid.Empty) return ApiResponse<bool>.Failure(errMessage, new() { "Doctor Id must not be empty" });
 
             var success = await _repo.SoftDeleteAsync(id);
-            if (!success)
-                return new ApiResponse<bool>
-                {
-                    Message = errMessage,
-                    Errors = { $"Doctor not found with Id {id}" },
-                    StatusCode = StatusCodes.Status404NotFound
-                };
+            if (!success) return ApiResponse<bool>.Failure(errMessage, new() { $"Doctor not found with Id {id}" }, StatusCodes.Status404NotFound);
 
-            return new ApiResponse<bool>
-            {
-                Data = success,
-                Message = "Doctor deleted successfully",
-                StatusCode = StatusCodes.Status200OK
-            };
+            return ApiResponse<bool>.Success(success, "Doctor deleted successfully");
         }
 
         public async Task<ApiResponse<DoctorDto>> GetByIdAsync(Guid id)
         {
             const string errMessage = "Failed to get doctor";
 
-            if (id == Guid.Empty)
-                return new ApiResponse<DoctorDto>
-                {
-                    Message = errMessage,
-                    Errors = { "Doctor Id must not be empty" },
-                    StatusCode = StatusCodes.Status400BadRequest
-                };
+            if (id == Guid.Empty) return ApiResponse<DoctorDto>.Failure(errMessage, new() { "Doctor Id must not be empty" });
 
             var doctor = await _repo.GetByIdAsync(id);
-            if (doctor == null)
-                return new ApiResponse<DoctorDto>
-                {
-                    Message = errMessage,
-                    Errors = { $"Doctor not found with Id {id}" },
-                    StatusCode = StatusCodes.Status404NotFound
-                };
+            if (doctor == null) return ApiResponse<DoctorDto>.Failure(errMessage, new() { $"Doctor not found with Id {id}" }, StatusCodes.Status404NotFound);
 
-            return new ApiResponse<DoctorDto>
-            {
-                Data = _mapper.Map<DoctorDto>(doctor),
-                Message = "Doctor fetched successfully",
-                StatusCode = StatusCodes.Status200OK
-            };
+            return ApiResponse<DoctorDto>.Success(_mapper.Map<DoctorDto>(doctor), "Doctor fetched successfully");
         }
 
         public async Task<ApiResponse<IReadOnlyList<DoctorDto>>> GetAllAsync()
@@ -163,31 +129,21 @@ namespace Clinic.API.BL.Services
             var doctors = await _repo.GetAllAsync();
             var dtos = _mapper.Map<IReadOnlyList<DoctorDto>>(doctors);
 
-            return new ApiResponse<IReadOnlyList<DoctorDto>>
-            {
-                Data = dtos,
-                Message = "Doctors fetched successfully",
-                StatusCode = StatusCodes.Status200OK
-            };
+            return ApiResponse<IReadOnlyList<DoctorDto>>.Success(dtos, "Doctors fetched successfully");
         }
+
         public async Task<ApiResponse<PagedResult<DoctorDto>>> GetPagedAsync(PagingDto dto)
         {
-            var (patients, total) = await _repo.GetPagedAsync(dto);
+            var (doctors, total) = await _repo.GetPagedAsync(dto);
+            var items = _mapper.Map<List<DoctorDto>>(doctors);
 
-            var items = _mapper.Map<List<DoctorDto>>(patients);
-
-            return new ApiResponse<PagedResult<DoctorDto>>
+            return ApiResponse<PagedResult<DoctorDto>>.Success(new PagedResult<DoctorDto>
             {
-                Data = new PagedResult<DoctorDto>
-                {
-                    Items = items,
-                    Total = total,
-                    Page = dto.Page,
-                    PageSize = dto.PageSize
-                },
-                Message = "Doctors fetched successfully",
-                StatusCode = StatusCodes.Status200OK
-            };
+                Items = items,
+                Total = total,
+                Page = dto.Page,
+                PageSize = dto.PageSize
+            }, "Doctors fetched successfully");
         }
     }
 

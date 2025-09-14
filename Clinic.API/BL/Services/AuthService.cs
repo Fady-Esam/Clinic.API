@@ -1,15 +1,20 @@
-﻿using Azure;
+﻿using AutoMapper;
+using Azure;
 using Azure.Core;
 using Clinic.API.BL.Dtos.AuthDtos;
+using Clinic.API.BL.Dtos.PatientDtos;
 using Clinic.API.BL.Interfaces.AuthInterfaces;
+using Clinic.API.BL.Interfaces.DoctorInterfaces;
 using Clinic.API.DL.Models;
 using Clinic.API.Domain.Entities;
+using Clinic.API.Domain.Enums;
 using Humanizer;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.JSInterop.Infrastructure;
 using Newtonsoft.Json.Linq;
@@ -25,263 +30,137 @@ namespace Clinic.API.BL.Services
 {
     public class AuthService : IAuthService
     {
-        
-       private readonly UserManager<ApplicationUser> _userManager;
-       private readonly RoleManager<IdentityRole> _roleManager;
-       private readonly JWT _jwt;
+        private readonly UserManager<ApplicationUser> _userManager;
+        private readonly JWT _jwt;
 
-        public AuthService(UserManager<ApplicationUser> userManager, RoleManager<IdentityRole> roleManager, JWT jwt)
+        public AuthService(UserManager<ApplicationUser> userManager, JWT jwt)
         {
             _userManager = userManager;
-            _roleManager = roleManager;
             _jwt = jwt;
-
         }
 
         public async Task<ApiResponse<AuthResponseDto>> RegisterAsync(RegisterDto dto, string? ipAddress)
         {
+            const string errMessage = "Registration failed";
+            if (await _userManager.Users.AsNoTracking().AnyAsync(u => u.NormalizedUserName == dto.UserName.ToUpper()))
+                return ApiResponse<AuthResponseDto>.Failure(errMessage, new () { "User name is already in use by another user" });
 
-            if(string.IsNullOrWhiteSpace(dto.RoleName))
-            {
-                return new ApiResponse<AuthResponseDto>
-                {
-                    Message = "Registration failed",
-                    Errors = new() { "Role Name must not be Empty or null or white spaces" },
-                    StatusCode = StatusCodes.Status400BadRequest
-                };
-            }
-          
-            if (!await _roleManager.RoleExistsAsync(dto.RoleName))
-            {
-                return new ApiResponse<AuthResponseDto>
-                {
-                    Message = "Registration failed",
-                    Errors = new() { $"Role '{dto.RoleName}' does not exist in the system." },
-                    StatusCode = StatusCodes.Status400BadRequest
-                };
-            }
+            if (!string.IsNullOrWhiteSpace(dto.Email) && await _userManager.Users.AsNoTracking().AnyAsync(u => u.NormalizedEmail == dto.Email.ToUpper()))
+                return ApiResponse<AuthResponseDto>.Failure(errMessage, new () { "Email is already in use by another user" });
+
+            if (!string.IsNullOrWhiteSpace(dto.PhoneNumber) && await _userManager.Users.AsNoTracking().AnyAsync(u => u.PhoneNumber == dto.PhoneNumber))
+                return ApiResponse<AuthResponseDto>.Failure(errMessage, new () { "Phone number is already in use by another user " });
+
+            var invalidRoles = dto.Roles!.Where(r => !Enum.TryParse<UserRole>(r, ignoreCase: true, out _)).ToList();
+            if (invalidRoles.Any())
+                return ApiResponse<AuthResponseDto>.Failure(errMessage, invalidRoles.Select(r => $"Role '{r}' does not exist in the system.").ToList());
 
             var user = new ApplicationUser
             {
-                UserName = dto.Username,
+                UserName = dto.UserName,
                 Email = dto.Email,
                 PhoneNumber = dto.PhoneNumber
             };
 
             var result = await _userManager.CreateAsync(user, dto.Password);
-
             if (!result.Succeeded)
-            {
-                return new ApiResponse<AuthResponseDto>
-                {
-                    Message = "Registration failed",
-                    Errors =  result.Errors.Select(e => e.Description).ToList(),
-                    StatusCode = StatusCodes.Status400BadRequest
-                };
-            }
+                return ApiResponse<AuthResponseDto>.Failure(errMessage, result.Errors.Select(e => e.Description).ToList());
 
-            await _userManager.AddToRoleAsync(user, dto.RoleName);
+            await _userManager.AddToRolesAsync(user, dto.Roles!);
             var roles = (await _userManager.GetRolesAsync(user)).ToList();
             var accessToken = await GenerateJwtToken(user);
-            var refreshToken = GenerateRefreshToken();
-            refreshToken.UserId = user.Id;
-            refreshToken.CreatedByIp = ipAddress;
-            await _userManager.SetAuthenticationTokenAsync(user, "MyApp", "RefreshToken", JsonSerializer.Serialize(refreshToken));
+            var newRefreshToken = GenerateRefreshToken(user.Id, ipAddress);
+            await _userManager.SetAuthenticationTokenAsync(user, "ClinicApp", "RefreshToken", JsonSerializer.Serialize(newRefreshToken));
 
             var authResponseDtoData = new AuthResponseDto
             {
                 UserId = user.Id,
                 UserName = user.UserName,
                 Email = user.Email,
+                PhoneNumber = user.PhoneNumber,
                 AccessToken = new JwtSecurityTokenHandler().WriteToken(accessToken),
-                RefreshToken = refreshToken.RefreshToken,
+                RefreshToken = newRefreshToken.RefreshToken,
                 Roles = roles,
                 AccessTokenExpiration = accessToken.ValidTo,
-                Message = "User registered successfully",
-                StatusCode = StatusCodes.Status201Created
-            };
-            return new ApiResponse<AuthResponseDto>
-            {
-                Data = authResponseDtoData,
-                Message = "User registered successfully",
-                StatusCode = StatusCodes.Status201Created
+                RefreshTokenExpiration = newRefreshToken.Expires
             };
 
+            return ApiResponse<AuthResponseDto>.Success(authResponseDtoData, "User registered successfully", StatusCodes.Status201Created);
         }
 
         public async Task<ApiResponse<AuthResponseDto>> LoginAsync(LoginDto dto, string? ipAddress)
         {
-
-            var user = await _userManager.FindByNameAsync(dto.Username);
+            var user = await _userManager.FindByNameAsync(dto.UserName);
             if (user == null || !await _userManager.CheckPasswordAsync(user, dto.Password))
-            {
-                return new ApiResponse<AuthResponseDto>
-                {
-                    Message = "Login failed",
-                    Errors = new () { "Invalid username or password" },
-                    StatusCode = StatusCodes.Status401Unauthorized,
-                };
-            }
-
+                return ApiResponse<AuthResponseDto>.Failure("Login failed", new () { "Invalid username or password" }, StatusCodes.Status401Unauthorized);
 
             var roles = (await _userManager.GetRolesAsync(user)).ToList();
             var accessToken = await GenerateJwtToken(user);
-            var refreshToken = GenerateRefreshToken();
-            refreshToken.UserId = user.Id;
-            refreshToken.CreatedByIp = ipAddress;
+            var newRefreshToken = GenerateRefreshToken(user.Id, ipAddress);
+            await _userManager.SetAuthenticationTokenAsync(user, "ClinicApp", "RefreshToken", JsonSerializer.Serialize(newRefreshToken));
 
-            await _userManager.SetAuthenticationTokenAsync(user, "MyApp", "RefreshToken", JsonSerializer.Serialize(refreshToken));
-
-            var authResponseDtoData =  new AuthResponseDto
+            var authResponseDtoData = new AuthResponseDto
             {
                 UserId = user.Id,
                 UserName = user.UserName,
                 Email = user.Email,
+                PhoneNumber = user.PhoneNumber,
                 AccessToken = new JwtSecurityTokenHandler().WriteToken(accessToken),
-                RefreshToken = refreshToken.RefreshToken,
+                RefreshToken = newRefreshToken.RefreshToken,
                 Roles = roles,
                 AccessTokenExpiration = accessToken.ValidTo,
-                RefreshTokenExpiration = refreshToken.Expires,
-                Message = "Login successful",
-                StatusCode = StatusCodes.Status200OK,
-            };
-            return new ApiResponse<AuthResponseDto>
-            {
-                Data = authResponseDtoData,
-                Message = "Login successful",
-                StatusCode = StatusCodes.Status200OK,
+                RefreshTokenExpiration = newRefreshToken.Expires,
             };
 
+            return ApiResponse<AuthResponseDto>.Success(authResponseDtoData, "Login successful");
         }
 
-        public async Task<ApiResponse<AuthResponseDto>> RefreshTokenAsync(RefreshTokenDto dto)
+        public async Task<ApiResponse<AuthResponseDto>> RefreshTokenAsync(CreateRefreshTokenDto dto, string? createdByIp)
         {
-
+            const string errMessage = "Getting new refresh token failed";
             var user = await _userManager.FindByIdAsync(dto.UserId);
-            if (user == null)
-            {
-                return new ApiResponse<AuthResponseDto>
-                {
-                    Message = "Getting new refresh token failed",
-                    Errors = new() { "User not found" },
-                    StatusCode = StatusCodes.Status404NotFound
-                };
-            }
+            if (user == null) return ApiResponse<AuthResponseDto>.Failure(errMessage, new () { "User not found" }, StatusCodes.Status404NotFound);
 
-            // Get stored refresh token
-            var storedTokenValue = await _userManager.GetAuthenticationTokenAsync(user, "MyApp", "RefreshToken");
-            if (string.IsNullOrEmpty(storedTokenValue))
-            {
-                return new ApiResponse<AuthResponseDto>
-                {
-                    Message = "Getting new refresh token failed",
-                    Errors = new() { "No refresh token found" },
-                    StatusCode = StatusCodes.Status404NotFound
-                };
-            }
+            var storedTokenValue = await _userManager.GetAuthenticationTokenAsync(user, "ClinicApp", "RefreshToken");
+            if (string.IsNullOrEmpty(storedTokenValue)) return ApiResponse<AuthResponseDto>.Failure(errMessage, new () { "No refresh token found" }, StatusCodes.Status404NotFound);
 
             var storedToken = JsonSerializer.Deserialize<RefreshTokenDto>(storedTokenValue);
+            if (storedToken == null) return ApiResponse<AuthResponseDto>.Failure(errMessage, new () { "Stored refresh token not found" }, StatusCodes.Status404NotFound);
+            if (storedToken.RefreshToken != dto.RefreshToken) return ApiResponse<AuthResponseDto>.Failure(errMessage, new () { "Refresh token mismatch" });
+            if (DateTime.UtcNow >= storedToken.Expires) return ApiResponse<AuthResponseDto>.Failure(errMessage, new () { "Refresh token has expired" }, StatusCodes.Status401Unauthorized);
 
-            // Validate token
-            if (storedToken == null)
-            {
-                return new ApiResponse<AuthResponseDto>
-                {
-                    Message = "Getting new refresh token failed",
-                    Errors = new() { "Stored refresh token not found" },
-                    StatusCode = StatusCodes.Status404NotFound
-                };
-            }
-
-            if (storedToken.RefreshToken != dto.RefreshToken)
-            {
-                return new ApiResponse<AuthResponseDto>
-                {
-                    Message = "Getting new refresh token failed",    
-                    Errors = new() { "Refresh token mismatch" },
-                    StatusCode = StatusCodes.Status400BadRequest
-                };
-            }
-
-            if (storedToken.IsExpired)
-            {
-                return new ApiResponse<AuthResponseDto>
-                {
-                    Message = "Getting new refresh token failed",
-                    Errors = new() { "Refresh token has expired" },
-                    StatusCode = StatusCodes.Status401Unauthorized
-                };
-            }
-
-
-            // ✅ Generate new tokens
             var newAccessToken = await GenerateJwtToken(user);
-            var newRefreshToken = new RefreshTokenDto
-            {
-                UserId = user.Id,
-                RefreshToken = GenerateRefreshToken().RefreshToken,
-                Created = DateTime.UtcNow,
-                Expires = DateTime.UtcNow.AddDays(7),
-                CreatedByIp = dto.CreatedByIp,
-            };
+            var newRefreshToken = GenerateRefreshToken(user.Id, createdByIp);
+            await _userManager.SetAuthenticationTokenAsync(user, "ClinicApp", "RefreshToken", JsonSerializer.Serialize(newRefreshToken));
 
-            // Mark old token revoked
-            //storedToken.Revoked = DateTime.UtcNow;
-            //storedToken.RevokedByIp = ipAddress;
-            //storedToken.ReplacedByToken = newRefreshToken.RefreshToken;
-
-            // Save new token
-            await _userManager.SetAuthenticationTokenAsync(user, "MyApp", "RefreshToken", JsonSerializer.Serialize(newRefreshToken));
-
-            var authResponseDto =  new AuthResponseDto
+            var authResponseDto = new AuthResponseDto
             {
                 UserId = user.Id,
                 UserName = user.UserName,
                 Email = user.Email,
+                PhoneNumber = user.PhoneNumber,
                 Roles = (await _userManager.GetRolesAsync(user)).ToList(),
                 AccessToken = new JwtSecurityTokenHandler().WriteToken(newAccessToken),
                 RefreshToken = newRefreshToken.RefreshToken,
                 AccessTokenExpiration = newAccessToken.ValidTo,
-                RefreshTokenExpiration = newRefreshToken.Expires!.Value,
-                Message = "Token refreshed successfully",
-                StatusCode = StatusCodes.Status200OK
+                RefreshTokenExpiration = newRefreshToken.Expires,
             };
-            return new ApiResponse<AuthResponseDto>
-            {
-                Data = authResponseDto,
-                Message = "Token refreshed successfully",
-                StatusCode = StatusCodes.Status200OK
-            };
-        }
 
+            return ApiResponse<AuthResponseDto>.Success(authResponseDto, "Token refreshed successfully");
+        }
 
         public async Task<ApiResponse<bool>> RevokeRefreshTokenAsync(RevokeTokenDto dto)
         {
-
-
             var user = await _userManager.FindByIdAsync(dto.UserId);
-            if (user == null)
-            {
-                return new ApiResponse<bool>
-                {
-                    Data = false,
-                    Message = "User Not Found",
-                    StatusCode = StatusCodes.Status404NotFound
-                };
-            }
-            await _userManager.RemoveAuthenticationTokenAsync(user, "MyApp", "RefreshToken");
-            return new ApiResponse<bool>
-            {
-                Data = true,
-                Message = "Refresh Token Revoked Successfully",
-                StatusCode = StatusCodes.Status200OK
-            };
+            if (user == null) return ApiResponse<bool>.Failure("Failed to revoke refresh token", new() { "User Not Found" }, StatusCodes.Status404NotFound);
+
+            await _userManager.RemoveAuthenticationTokenAsync(user, "ClinicApp", "RefreshToken");
+            return ApiResponse<bool>.Success(true, "Refresh Token Revoked Successfully");
         }
 
         // 🔹 Helpers
         private async Task<JwtSecurityToken> GenerateJwtToken(ApplicationUser user)
         {
-
             var claims = new List<Claim>
             {
                 new Claim(ClaimTypes.NameIdentifier, user.Id),
@@ -289,40 +168,35 @@ namespace Clinic.API.BL.Services
                 new Claim(JwtRegisteredClaimNames.Sub, user.UserName ?? ""),
                 new Claim(JwtRegisteredClaimNames.Email, user.Email ?? ""),
             };
-            var roles = await _userManager.GetRolesAsync(user!);
+            var roles = await _userManager.GetRolesAsync(user);
             foreach (var item in roles)
-            {
                 claims.Add(new Claim(ClaimTypes.Role, item));
-            }
+
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwt.Key));
             var credintial = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-            var jwtToken = new JwtSecurityToken(
-                    issuer: _jwt.Issuer,
-                    audience: _jwt.Audience,
-                    claims: claims,
-                    expires: DateTime.UtcNow.AddMinutes(15),
-                    signingCredentials: credintial
-                );
-            return jwtToken;
-
+            return new JwtSecurityToken(
+                issuer: _jwt.Issuer,
+                audience: _jwt.Audience,
+                claims: claims,
+                expires: DateTime.UtcNow.AddMinutes(15),
+                signingCredentials: credintial
+            );
         }
 
-
-
-        private RefreshTokenDto GenerateRefreshToken()
+        private RefreshTokenDto GenerateRefreshToken(string userId, string? createdByIp)
         {
             var randomBytes = new byte[64];
             using var rng = RandomNumberGenerator.Create();
             rng.GetBytes(randomBytes);
-
             return new RefreshTokenDto
             {
+                UserId = userId,
                 RefreshToken = Convert.ToBase64String(randomBytes),
-                Created = DateTime.UtcNow,
-                Expires = DateTime.UtcNow.AddDays(7) // long-lived
+                CreatedByIp = createdByIp
             };
         }
     }
+
 }
 
 
