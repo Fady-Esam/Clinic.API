@@ -26,10 +26,10 @@ using System.Text.Json.Serialization;
 var builder = WebApplication.CreateBuilder(args);
 // Bind JWT settings into JWT class
 builder.Services.Configure<JwtSetting>(builder.Configuration.GetSection("Jwt"));
-//builder.Services.Configure<EmailSetting>(builder.Configuration.GetSection("Email"));
-//builder.Services.Configure<SmsSetting>(builder.Configuration.GetSection("Sms"));
-//builder.Services.Configure<GoogleSetting>(builder.Configuration.GetSection("Google"));
-//builder.Services.Configure<FacebookSetting>(builder.Configuration.GetSection("Facebook"));
+builder.Services.Configure<EmailSetting>(builder.Configuration.GetSection("Email"));
+builder.Services.Configure<SmsSetting>(builder.Configuration.GetSection("Sms"));
+builder.Services.Configure<GoogleSetting>(builder.Configuration.GetSection("Google"));
+builder.Services.Configure<FacebookSetting>(builder.Configuration.GetSection("Facebook"));
 
 builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<JwtSetting>>().Value);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<EmailSetting>>().Value);

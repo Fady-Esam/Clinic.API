@@ -49,9 +49,8 @@ namespace Clinic.API.BL.Services
         private readonly GoogleSetting _googleSetting;
         private readonly FacebookSetting _facebookSetting;
         private readonly IMapper _mapper;
-        private readonly ApplicationDbContext _context;
 
-        public AuthService(ApplicationDbContext context, UserManager<ApplicationUser> userManager, IMapper mapper, IEmailService emailService, ISmsService SmsService, IUserConfirmationCodeService confirmationCodeService, IRefreshTokenRepository refreshTokenRepo, JwtSetting jwtSetting, GoogleSetting googleSetting, FacebookSetting facebookSetting)
+        public AuthService(UserManager<ApplicationUser> userManager, IMapper mapper, IEmailService emailService, ISmsService SmsService, IUserConfirmationCodeService confirmationCodeService, IRefreshTokenRepository refreshTokenRepo, JwtSetting jwtSetting, GoogleSetting googleSetting, FacebookSetting facebookSetting)
         {
             _userManager = userManager;
             _emailService = emailService;
@@ -62,16 +61,14 @@ namespace Clinic.API.BL.Services
             _facebookSetting = facebookSetting;
             _refreshTokenRepo = refreshTokenRepo;
             _mapper = mapper;
-            _context = context;
+
         }
 
         public async Task<ApiResponse<AuthResponseDto>> RegisterAsync(RegisterDto dto)
         {
             const string errMessage = "Registration failed";
 
-            await using var transaction = await _context.Database.BeginTransactionAsync();
-            try
-            {
+
                 if (!string.IsNullOrWhiteSpace(dto.UserName) && await _userManager.Users.AsNoTracking().AnyAsync(u => u.NormalizedUserName == dto.UserName.ToUpper()))
                     return ApiResponse<AuthResponseDto>.Failure(errMessage, new() { "User name is already in use by another user" });
 
@@ -120,11 +117,7 @@ namespace Clinic.API.BL.Services
                 };
 
                 return ApiResponse<AuthResponseDto>.Success(authResponseDtoData, "User registered successfully", StatusCodes.Status201Created);
-            }catch(Exception ex)
-            {
-                await transaction.RollbackAsync();
-                throw new ApiException(errMessage, new() { ex.Message });
-            }
+            
         }
 
         public async Task<ApiResponse<AuthResponseDto>> LoginAsync(LoginDto dto)
